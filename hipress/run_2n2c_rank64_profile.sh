@@ -1,0 +1,1 @@
+cd /workspace && horovodrun -np 2 -H 192.168.1.49:1,192.168.1.52:1 python /workspace/hipress_powersgd_vgg.py --batch-size 16 --epochs 1 --num-iterations 200 --threshold 4096 --partition-threshold 16777216 --model vgg19 --algorithm powersgd --powersgd-rank 64 --profile

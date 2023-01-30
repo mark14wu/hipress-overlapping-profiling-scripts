@@ -1,0 +1,1 @@
+cd /workspace && mpirun --allow-run-as-root -n 2 -H 192.168.1.49:1,192.168.1.52:1 torchrun --nnodes=2 --nproc_per_node=1 --rdzv_id=1 --rdzv_backend=c10d --rdzv_endpoint="192.168.1.49:54321" /workspace/torchddp_powersgd_vgg.py --batch-size 16 --num-epochs 1 --num-iterations 200 --log-interval 20 --model vgg19 --powersgd-rank 1 --profile
