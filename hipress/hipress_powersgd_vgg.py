@@ -296,30 +296,38 @@ def train(epoch):
     else:
         btic = time.time()
         #cpu api begin end
-        for batch_idx, (data, target) in enumerate(train_loader):
-            adjust_learning_rate(epoch, batch_idx)
-            if args.cuda:
-                data, target = data.cuda(), target.cuda()
-            optimizer.zero_grad()
-            # Split data into sub-batches of size batch_size
-            for i in range(0, len(data), args.batch_size):
-                data_batch = data[i:i + args.batch_size]
-                target_batch = target[i:i + args.batch_size]
-                output = model(data_batch)
-                loss = F.cross_entropy(output, target_batch)
-                loss.div_(math.ceil(float(len(data)) / args.batch_size))
-                loss.backward()
-            # Gradient is applied across all ranks
-            optimizer.step()
-            if (batch_idx + 1) % args.print_intervals == 0:
-                average_speed = hvd.size() * args.batch_size * args.print_intervals / (time.time() - btic)
-                btic = time.time()
-                if hvd.rank() == 0:
-                    logging.info("Epoch[{:d}] Batch[{:d}]\tSpeed: {:.2f} samples/sec".format(epoch, batch_idx + 1, average_speed))
-                    step_time = 1000 / (average_speed / hvd.size() / args.batch_size)
-                    logging.info('step time: %.2f ms', step_time)
-            if (batch_idx >= args.num_iterations):
-                break
+        with profiler.profile(
+            activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.CUDA],
+            record_shapes=True,
+            with_stack=True) as prof:
+            with profiler.record_function("model_training"):
+                for batch_idx, (data, target) in enumerate(train_loader):
+                    adjust_learning_rate(epoch, batch_idx)
+                    if args.cuda:
+                        data, target = data.cuda(), target.cuda()
+                    optimizer.zero_grad()
+                    # Split data into sub-batches of size batch_size
+                    for i in range(0, len(data), args.batch_size):
+                        data_batch = data[i:i + args.batch_size]
+                        target_batch = target[i:i + args.batch_size]
+                        with profiler.record_function("forward"):
+                            output = model(data_batch)
+                            loss = F.cross_entropy(output, target_batch)
+                            loss.div_(math.ceil(float(len(data)) / args.batch_size))
+                        with profiler.record_function("backward"):
+                            loss.backward()
+                    # Gradient is applied across all ranks
+                    with profiler.record_function("update"):
+                        optimizer.step()
+                    if (batch_idx + 1) % args.print_intervals == 0:
+                        average_speed = hvd.size() * args.batch_size * args.print_intervals / (time.time() - btic)
+                        btic = time.time()
+                        if hvd.rank() == 0:
+                            logging.info("Epoch[{:d}] Batch[{:d}]\tSpeed: {:.2f} samples/sec".format(epoch, batch_idx + 1, average_speed))
+                            step_time = 1000 / (average_speed / hvd.size() / args.batch_size)
+                            logging.info('step time: %.2f ms', step_time)
+                    if (batch_idx >= args.num_iterations):
+                        break
     #import lltm_cuda
     #lltm_cuda.end()
     if log_writer:
